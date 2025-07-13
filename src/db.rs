@@ -1,5 +1,9 @@
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 use sqlx::{migrate::MigrateDatabase, Pool, Sqlite};
+
+use crate::chooser;
 
 #[derive(Serialize, Deserialize, sqlx::FromRow, Debug, sqlx::Type)]
 pub struct Run {
@@ -26,12 +30,67 @@ pub struct Leaderboards {
 	endless: bool,
 }
 
-pub async fn init_db(database_url: &str) -> Option<Pool<Sqlite>> {
+pub async fn init_runs() -> Pool<Sqlite> {
+	let db = init_db("db/db.sqlite").await;
+
+	println!(
+		"{:?}",
+		sqlx::query(
+			"CREATE TABLE runs (
+                id TEXT,
+                name TEXT,
+                ante INTEGER,
+                round INTEGER,
+                best_hand REAL,
+                rerolls INTEGER,
+                endless BOOLEAN
+            );",
+		)
+		.execute(&db)
+		.await
+	);
+	db
+}
+
+pub async fn init_seed() -> Pool<Sqlite> {
+	let db = init_db("db/db.sqlite").await;
+	println!(
+		"making seed table: {:?}",
+		sqlx::query(
+			//hackyyyyyyy
+			"DROP TABLE seed;
+            CREATE TABLE seed (
+                seed TEXT,
+                deck TEXT,
+                stake INTEGER
+            );",
+		)
+		.execute(&db)
+		.await
+	);
+	let seed = chooser::get_random_seed();
+	let request = format!(
+		r#"INSERT INTO seed (seed,deck,stake)
+            VALUES("{}","{:?}",{})"#,
+		&seed.seed, seed.deck, seed.stake as u8
+	);
+
+	println!(
+		"inserting seed: {:?}",
+		sqlx::query(&request).execute(&db).await
+	);
+
+	db
+}
+
+pub async fn init_db(database_url: &str) -> Pool<Sqlite> {
 	if !Sqlite::database_exists(database_url).await.unwrap_or(false) {
 		match Sqlite::create_database(database_url).await {
 			Ok(_) => eprintln!("Database created"),
 			Err(e) => eprintln!("Error creating database: {}", e),
 		}
 	}
-	sqlx::sqlite::SqlitePool::connect(database_url).await.ok()
+	sqlx::sqlite::SqlitePool::connect(database_url)
+		.await
+		.unwrap()
 }
