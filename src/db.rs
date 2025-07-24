@@ -35,7 +35,7 @@ pub async fn init_runs() -> Pool<Sqlite> {
 	let db = init_db("db/db.sqlite").await;
 
 	println!(
-		"{:?}",
+		"init_runs: {:?}",
 		sqlx::query(
 			"CREATE TABLE IF NOT EXISTS runs (
                 id TEXT,

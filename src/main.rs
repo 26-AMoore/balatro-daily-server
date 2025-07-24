@@ -1,6 +1,7 @@
 use chooser::SeedSimple;
+use clap::Parser;
 use db::{init_runs, init_seed, Run};
-use sqlx::{sqlite::SqliteRow, Pool, Row, Sqlite};
+use sqlx::{Pool, Row, Sqlite};
 use std::{
 	collections::HashSet,
 	error::Error,
@@ -14,6 +15,14 @@ mod db;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	//pretty_env_logger::init();
+	let args = Args::parse();
+	if args.clear {
+		println!("cleaning");
+		db::clean(&init_runs().await).await;
+		init_seed().await;
+		return Ok(());
+	}
+
 	let address = [0, 0, 0, 0];
 
 	let (run_sender, run_receiver) = mpsc::channel::<String>();
@@ -144,4 +153,10 @@ async fn get_leaderboard(
 	} else {
 		Err(warp::reject())
 	}
+}
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+	#[arg(short, long)]
+	clear: bool,
 }
