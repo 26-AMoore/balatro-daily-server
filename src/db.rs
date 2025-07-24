@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use sqlx::{migrate::MigrateDatabase, Pool, Sqlite};
+use warp::{filters::query::query, reply::reply};
 
 use crate::chooser;
 
@@ -36,7 +37,7 @@ pub async fn init_runs() -> Pool<Sqlite> {
 	println!(
 		"{:?}",
 		sqlx::query(
-			"CREATE TABLE runs (
+			"CREATE TABLE IF NOT EXISTS runs (
                 id TEXT,
                 name TEXT,
                 ante INTEGER,
@@ -54,12 +55,18 @@ pub async fn init_runs() -> Pool<Sqlite> {
 
 pub async fn init_seed() -> Pool<Sqlite> {
 	let db = init_db("db/db.sqlite").await;
+	if sqlx::query!("select * from seed;")
+		.fetch_one(&db)
+		.await
+		.is_ok()
+	{
+		return db;
+	}
 	println!(
 		"making seed table: {:?}",
 		sqlx::query(
 			//hackyyyyyyy
-			"DROP TABLE seed;
-            CREATE TABLE seed (
+			"CREATE TABLE IF NOT EXISTS seed (
                 seed TEXT,
                 deck TEXT,
                 stake INTEGER
@@ -69,6 +76,7 @@ pub async fn init_seed() -> Pool<Sqlite> {
 		.await
 	);
 	let seed = chooser::get_random_seed();
+	println!("{:?}", seed);
 	let request = format!(
 		r#"INSERT INTO seed (seed,deck,stake)
             VALUES("{}","{:?}",{})"#,
@@ -93,4 +101,9 @@ pub async fn init_db(database_url: &str) -> Pool<Sqlite> {
 	sqlx::sqlite::SqlitePool::connect(database_url)
 		.await
 		.unwrap()
+}
+
+pub async fn clean(pool: &Pool<Sqlite>) {
+	_ = sqlx::query!("delete from runs;").execute(pool).await;
+	_ = sqlx::query!("delete from seed;").execute(pool).await;
 }
