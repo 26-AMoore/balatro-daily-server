@@ -6,11 +6,14 @@ use std::{
 	collections::HashSet,
 	error::Error,
 	sync::mpsc::{self, Receiver, Sender},
+	time::Instant,
 };
 use tokio::{self, join};
 use warp::{filters::body::json, reply::Reply, Filter};
 mod chooser;
 mod db;
+mod tests;
+use tests::populate_random;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -21,6 +24,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		db::clean(&init_runs().await).await;
 		init_seed().await;
 		return Ok(());
+	}
+	if args.tests > 0 {
+		populate_random(args.tests).await;
 	}
 
 	let address = [0, 0, 0, 0];
@@ -157,6 +163,10 @@ async fn get_leaderboard(
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
+	/// clears the database
 	#[arg(short, long)]
 	clear: bool,
+	/// how many random values to add into the database for testing
+	#[arg(short, long, default_value = "0")]
+	tests: i64,
 }
