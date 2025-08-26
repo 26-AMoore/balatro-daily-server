@@ -6,7 +6,6 @@ use std::{
 	collections::HashSet,
 	error::Error,
 	sync::mpsc::{self, Receiver, Sender},
-	time::Instant,
 };
 use tokio::{self, join};
 use warp::{filters::body::json, reply::Reply, Filter};
@@ -31,7 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 	let address = [0, 0, 0, 0];
 
-	let (run_sender, run_receiver) = mpsc::channel::<String>();
+	let (run_sender, run_receiver) = mpsc::channel::<Run>();
 	let mut ids: HashSet<String> = HashSet::new();
 
 	let pool = init_runs().await;
@@ -49,17 +48,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	//filters
 	let id_filter = warp::any().and(warp::path("id").and(warp::path::param()).and_then(
 		|id: String| async move {
-			let pool = init_runs().await;
-			let data = sqlx::query(&format!("select id from runs where id={}", id))
-				.fetch_one(&pool)
-				.await;
-			if true {
-				Ok(match data {
-					Ok(_) => warp::reply::html("true"),
-					Err(_) => warp::reply::html("false"),
-				})
-			} else {
-				Err(warp::reject())
+			match id_exists(id).await {
+				//feels messy but idk how to do it better
+				Ok(v) => return Ok(warp::reply::html(v.to_string())),
+				Err(e) => return Err(e),
 			}
 		},
 	));
@@ -91,10 +83,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	Ok(())
 }
 
-async fn handle_run_mpsc_receiver(receiver: Receiver<String>, pool: Pool<Sqlite>) {
-	for query in receiver.iter() {
-		println!("{}", query);
-		println!("{:?}", sqlx::query(&query).execute(&pool).await);
+async fn handle_run_mpsc_receiver(receiver: Receiver<Run>, pool: Pool<Sqlite>) {
+	for data in receiver.iter() {
+		let query: String = format!(
+			r#"INSERT INTO runs (id,name,ante,round,best_hand,rerolls,endless)
+        VALUES("{}","{}",{},{},{},{},{});"#,
+			data.id, data.name, data.ante, data.round, data.best_hand, data.rerolls, data.endless
+		);
+		if id_exists(data.id).await.unwrap().eq("false") {
+			println!("{}", query);
+			println!("{:?}", sqlx::query(&query).execute(&pool).await);
+		}
 	}
 }
 
@@ -110,14 +109,8 @@ async fn get_seed(pool: Pool<Sqlite>) -> SeedSimple {
 	}
 }
 
-fn handle_run_upload(data: Run, sender: Sender<String>) -> impl Reply {
-	let query: String = format!(
-		r#"INSERT INTO runs (id,name,ante,round,best_hand,rerolls,endless)
-        VALUES("{}","{}",{},{},{},{},{});"#,
-		data.id, data.name, data.ante, data.round, data.best_hand, data.rerolls, data.endless
-	);
-	sender.send(query).ok();
-	println!("{:?}", data);
+fn handle_run_upload(data: Run, sender: Sender<Run>) -> impl Reply {
+	sender.send(data).ok();
 	warp::reply()
 }
 
@@ -160,6 +153,22 @@ async fn get_leaderboard(
 		Err(warp::reject())
 	}
 }
+// should fix, bad return type, happened from a refactor
+async fn id_exists(id: String) -> Result<String, warp::reject::Rejection> {
+	let pool = init_runs().await;
+	let data = sqlx::query(&format!("select id from runs where id={}", id))
+		.fetch_one(&pool)
+		.await;
+	if true {
+		Ok(match data {
+			Ok(_) => "true".to_string(),
+			Err(_) => "false".to_string(),
+		})
+	} else {
+		Err(warp::reject())
+	}
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {

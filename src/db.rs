@@ -1,8 +1,6 @@
-use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use sqlx::{migrate::MigrateDatabase, Pool, Sqlite};
-use warp::{filters::query::query, reply::reply};
 
 use crate::chooser;
 

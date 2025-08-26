@@ -6,11 +6,11 @@ pub async fn populate_random(amount: i64) {
 	let pool = db::init_db("db/db.sqlite").await;
 	for i in 0..amount {
 		let data = Run {
-			id: random::<i64>().to_string(),
+			id: 1.to_string(), // random::<i64>().to_string(),
 			name: i.to_string(),
 			ante: random(),
 			round: i as i16,
-			best_hand: rand::random::<f64>() * f64::MAX,
+			best_hand: rand::random::<u64>() as f64,
 			rerolls: i as u32,
 			endless: false,
 		};
